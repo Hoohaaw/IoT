@@ -1,10 +1,8 @@
 [build]
 builder = "railpack"
-buildCommand = "echo building!"
 
 [deploy]
-preDeployCommand = ["npm run db:migrate"]
-startCommand = "echo starting!"
+startCommand = "node-red -u . -p $PORT"
 healthcheckPath = "/"
 healthcheckTimeout = 100
 restartPolicyType = "never"
