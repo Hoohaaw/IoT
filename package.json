@@ -1,0 +1,13 @@
+{
+  "name": "iot-node-red",
+  "version": "1.0.0",
+  "description": "Node-RED backend for IoT assignment (1dv027)",
+  "scripts": {
+    "start": "node-red -u . -p 1880"
+  },
+  "dependencies": {
+    "node-red": "^3.1.9",
+    "node-red-dashboard": "^3.6.5",
+    "node-red-node-sqlite": "^1.0.6"
+  }
+}
