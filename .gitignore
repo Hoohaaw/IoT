@@ -7,3 +7,4 @@ iot_data.db
 .config.runtime.json.backup
 .config.users.json
 .config.users.json.backup
+.claude
