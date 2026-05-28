@@ -13,7 +13,7 @@
     "name": "emqx-public",
     "broker": "broker.emqx.io",
     "port": "1883",
-    "clientid": "nodered-iot",
+    "clientid": "nodered-ap224gy",
     "autoConnect": true,
     "usetls": false,
     "protocolVersion": "4",
