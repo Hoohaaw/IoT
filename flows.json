@@ -38,11 +38,21 @@
   },
 
   {
+    "id": "ui-group-pico",
+    "type": "ui_group",
+    "name": "Device Status",
+    "tab": "ui-tab-main",
+    "order": 1,
+    "disp": true,
+    "width": "6"
+  },
+
+  {
     "id": "ui-group-sensor",
     "type": "ui_group",
     "name": "Sensor Data",
     "tab": "ui-tab-main",
-    "order": 1,
+    "order": 2,
     "disp": true,
     "width": "6"
   },
@@ -52,7 +62,7 @@
     "type": "ui_group",
     "name": "Device Control",
     "tab": "ui-tab-main",
-    "order": 2,
+    "order": 3,
     "disp": true,
     "width": "6"
   },
@@ -123,7 +133,7 @@
     "pretty": false,
     "x": 340,
     "y": 160,
-    "wires": [["n-sqlite-insert", "n-chart-live"]]
+    "wires": [["n-sqlite-insert", "n-chart-live", "n-set-lastseen"]]
   },
 
   {
@@ -259,7 +269,7 @@
     "type": "ui_group",
     "name": "WiFi Networks",
     "tab": "ui-tab-main",
-    "order": 3,
+    "order": 4,
     "disp": true,
     "width": "12"
   },
@@ -329,6 +339,67 @@
     "templateScope": "global",
     "x": 140,
     "y": 540,
+    "wires": [[]]
+  },
+
+  {
+    "id": "n-set-lastseen",
+    "type": "function",
+    "z": "tab-iot",
+    "name": "Track last seen",
+    "func": "flow.set('picoLastSeen', Date.now());\nreturn null;",
+    "outputs": 1,
+    "x": 560,
+    "y": 700,
+    "wires": [[]]
+  },
+
+  {
+    "id": "n-pico-poll",
+    "type": "inject",
+    "z": "tab-iot",
+    "name": "Check Pico status",
+    "props": [{"p": "payload"}],
+    "repeat": "15",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "2",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 160,
+    "y": 740,
+    "wires": [["n-pico-status"]]
+  },
+
+  {
+    "id": "n-pico-status",
+    "type": "function",
+    "z": "tab-iot",
+    "name": "Pico online check",
+    "func": "var lastSeen = flow.get('picoLastSeen') || 0;\nmsg.payload = (Date.now() - lastSeen) < 30000;\nreturn msg;",
+    "outputs": 1,
+    "x": 370,
+    "y": 740,
+    "wires": [["n-pico-indicator"]]
+  },
+
+  {
+    "id": "n-pico-indicator",
+    "type": "ui_template",
+    "z": "tab-iot",
+    "group": "ui-group-pico",
+    "name": "Pico status",
+    "order": 3,
+    "width": 0,
+    "height": "2",
+    "format": "<div style='display:flex;align-items:center;gap:10px;padding:8px 4px'><div style='width:10px;height:10px;border-radius:50%;background:{{msg.payload ? \"#22c55e\" : \"#ef4444\"}};box-shadow:0 0 6px {{msg.payload ? \"rgba(34,197,94,0.6)\" : \"rgba(239,68,68,0.6)\"}}'></div><span style='font-size:14px;color:#374151'>Pico is: <strong style='color:{{msg.payload ? \"#16a34a\" : \"#dc2626\"}}'>{{msg.payload ? \"Online\" : \"Offline\"}}</strong></span></div>",
+    "storeOutMessages": false,
+    "fwdInMessages": false,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "x": 580,
+    "y": 740,
     "wires": [[]]
   },
 
