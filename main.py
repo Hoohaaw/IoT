@@ -1,115 +1,82 @@
 import network
-import socket
+import ujson
+import utime
 from machine import Pin, ADC
-import time
+from umqtt.simple import MQTTClient
 
 # WiFi credentials
 SSID = "MOVISTAR-WIFI6-C070"
 PASSWORD = "j3bfYrju4SDN6bFd79MJ"
 
-# Battery monitoring (GP26 / ADC0 via voltage divider)
-battery_sensor = ADC(26)
-low_battery_led = Pin(15, Pin.OUT)
-LOW_BATTERY_THRESHOLD = 3.4
+# MQTT settings — replace STUDENT_ID with your LNU student ID (e.g. "al224cj")
+STUDENT_ID = "ap224gy"
+MQTT_BROKER = "broker.emqx.io"
+MQTT_PORT = 1883
+TOPIC_SENSOR = "lnu/iot/" + STUDENT_ID + "/sensor"
+TOPIC_LED = "lnu/iot/" + STUDENT_ID + "/command/led"
+TOPIC_WIFI = "lnu/iot/" + STUDENT_ID + "/wifi"
+CLIENT_ID = "pico-" + STUDENT_ID
 
-def read_battery_voltage():
-    raw = battery_sensor.read_u16()
-    adc_voltage = raw * 3.3 / 65535
-    battery_voltage = adc_voltage * 2  # voltage divider ratio (10k/10k)
-    return battery_voltage
+# MicroPython epoch is 2000-01-01; Unix epoch is 1970-01-01 (946684800s difference)
+EPOCH_OFFSET = 946684800
 
-def check_battery():
-    voltage = read_battery_voltage()
-    if voltage < LOW_BATTERY_THRESHOLD:
-        low_battery_led.on()
-    else:
-        low_battery_led.off()
-    return voltage
-
-# Temperature sensor
+# Hardware
+command_led = Pin("LED", Pin.OUT)  # onboard LED responds to dashboard commands
 temp_sensor = ADC(4)
-cached_temp = None
-last_temp_time = 0
 
 def read_temperature():
     raw = temp_sensor.read_u16()
     voltage = raw * 3.3 / 65535
-    temperature = 27 - (voltage - 0.706) / 0.001721
-    return temperature
+    return 27 - (voltage - 0.706) / 0.001721
 
-def update_temperature():
-    global cached_temp, last_temp_time
-    now = time.time()
-    if cached_temp is None or now - last_temp_time >= 600:
-        cached_temp = read_temperature()
-        last_temp_time = now
-        battery_v = check_battery()
-        print(f"Temperature updated: {cached_temp:.1f} °C | Battery: {battery_v:.2f}V")
-    return cached_temp
+def on_message(_topic, msg):
+    try:
+        data = ujson.loads(msg)
+        state = data.get("state", False)
+        command_led.value(1 if state else 0)
+        print("LED:", "ON" if state else "OFF")
+    except Exception as e:
+        print("Bad command payload:", e)
 
 # Connect to WiFi
 wlan = network.WLAN(network.STA_IF)
 wlan.active(True)
-wlan.connect(SSID, PASSWORD)
 
+# Scan before connecting — chip returns results when not yet associated
+scan_results = wlan.scan()
+nets = [{"ssid": n[0].decode(), "rssi": n[3]} for n in scan_results]
+print("WiFi scan found:", len(nets), "networks")
+
+wlan.connect(SSID, PASSWORD)
 print("Connecting to WiFi...")
 while not wlan.isconnected():
-    time.sleep(1)
+    utime.sleep(1)
+print("WiFi connected:", wlan.ifconfig()[0])
 
-print(f"Connected! Open: http://{wlan.ifconfig()[0]}")
+# Connect to MQTT broker
+client = MQTTClient(CLIENT_ID, MQTT_BROKER, port=MQTT_PORT)
+client.set_callback(on_message)
+client.connect()
+client.subscribe(TOPIC_LED)
+print("MQTT connected to", MQTT_BROKER)
+print("Publishing to:", TOPIC_SENSOR)
+print("Subscribed to:", TOPIC_LED)
 
-# Read and serve files
-def read_file(filename):
-    with open(filename, 'r') as f:
-        return f.read()
+# Publish scan results (retained so Node-RED gets it even if it connects later)
+client.publish(TOPIC_WIFI, ujson.dumps({"networks": nets}), retain=True)
+print("WiFi scan published:", len(nets), "networks")
 
-def get_dashboard():
-    html = read_file('dashboard.html')
-    temp = update_temperature()
-    html = html.replace('-- °C', f'{temp:.1f} °C')
-    return html
-
-# Start server
-addr = socket.getaddrinfo('0.0.0.0', 80)[0][-1]
-s = socket.socket()
-s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-s.bind(addr)
-s.listen(5)
-
-print("Server running...")
-
-s.settimeout(1)
+PUBLISH_INTERVAL = 10
+last_publish = -PUBLISH_INTERVAL  # publish immediately on first loop
 
 while True:
-    try:
-        cl, addr = s.accept()
-    except OSError:
-        continue
-
-    try:
-        request = cl.recv(1024).decode('utf-8')
-
-        # Route requests
-        if 'GET /temp.css' in request:
-            response = read_file('temp.css')
-            cl.send("HTTP/1.0 200 OK\r\nContent-type: text/css\r\n\r\n")
-        elif 'GET /dashboard.js' in request:
-            response = read_file('dashboard.js')
-            cl.send("HTTP/1.0 200 OK\r\nContent-type: application/javascript\r\n\r\n")
-        elif 'GET /data' in request:
-            temp = update_temperature()
-            response = '{"temperature": %.1f}' % temp
-            cl.send("HTTP/1.0 200 OK\r\nContent-type: application/json\r\nCache-Control: no-store\r\nContent-Length: %d\r\n\r\n" % len(response))
-        elif 'GET / ' in request:
-            response = get_dashboard()
-            cl.send("HTTP/1.0 200 OK\r\nContent-type: text/html\r\n\r\n")
-        else:
-            cl.send("HTTP/1.0 404 Not Found\r\n\r\n")
-            cl.close()
-            continue
-
-        cl.send(response)
-    except Exception as e:
-        print("Error:", e)
-    finally:
-        cl.close()
+    client.check_msg()
+    now = utime.time()
+    if now - last_publish >= PUBLISH_INTERVAL:
+        temp = read_temperature()
+        unix_ts = now + EPOCH_OFFSET
+        payload = ujson.dumps({"value": round(temp, 1), "timestamp": unix_ts})
+        client.publish(TOPIC_SENSOR, payload)
+        print("Published:", payload)
+        last_publish = now
+    utime.sleep_ms(100)
