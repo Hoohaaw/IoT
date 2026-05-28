@@ -123,7 +123,7 @@
     "pretty": false,
     "x": 340,
     "y": 160,
-    "wires": [["n-sqlite-insert", "n-gauge-temp", "n-chart-live"]]
+    "wires": [["n-sqlite-insert", "n-chart-live"]]
   },
 
   {
@@ -131,7 +131,7 @@
     "type": "function",
     "z": "tab-iot",
     "name": "Build INSERT",
-    "func": "var v = msg.payload.value;\nvar ts = msg.payload.timestamp;\nvar now = new Date().toISOString();\nmsg.payload = [\n    \"INSERT INTO sensor_readings (value, timestamp, received_at) VALUES (?, ?, ?)\",\n    [v, ts, now]\n];\nreturn msg;",
+    "func": "var v = msg.payload.value;\nvar ts = msg.payload.timestamp;\nvar now = new Date().toISOString();\nmsg.topic = \"INSERT INTO sensor_readings (value, timestamp, received_at) VALUES (?, ?, ?)\";\nmsg.params = [v, ts, now];\nreturn msg;",
     "outputs": 1,
     "x": 560,
     "y": 120,
@@ -183,7 +183,7 @@
     "outputs": 1,
     "x": 560,
     "y": 220,
-    "wires": [["n-chart"]]
+    "wires": [["n-chart", "n-gauge-temp"]]
   },
 
   {
